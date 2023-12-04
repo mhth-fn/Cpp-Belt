@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <vector>
 
 bool IsPalindrom(const std::string& word) {
 	for (size_t i = 0; i < word.size() / 2; ++i) {
@@ -11,9 +12,14 @@ bool IsPalindrom(const std::string& word) {
 	return true;
 }
 
-int main(){
-	std::string word;
-	std::cin >> word;
+using Words = std::vector<std::string>;
 
-	std::cout << IsPalindrom(word);
+Words PalindromFilter(const Words& words, int minLength){
+	Words res;
+	for (auto word : words){
+		if (IsPalindrom(word) && word.size() >= minLength){
+			res.push_back(word);
+		}
+	}
+	return res;
 }
