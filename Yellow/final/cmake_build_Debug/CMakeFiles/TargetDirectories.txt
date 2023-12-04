@@ -1,0 +1,4 @@
+/home/sergey/Documents/Cpp_belt/Yellow/final/cmake_build_Debug/CMakeFiles/hello_world.dir
+/home/sergey/Documents/Cpp_belt/Yellow/final/cmake_build_Debug/CMakeFiles/main.dir
+/home/sergey/Documents/Cpp_belt/Yellow/final/cmake_build_Debug/CMakeFiles/edit_cache.dir
+/home/sergey/Documents/Cpp_belt/Yellow/final/cmake_build_Debug/CMakeFiles/rebuild_cache.dir

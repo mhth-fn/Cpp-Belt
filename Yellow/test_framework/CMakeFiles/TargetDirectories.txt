@@ -1,0 +1,3 @@
+/home/sergey/Documents/Cpp_belt/Yellow/test_framework/CMakeFiles/test_runner.dir
+/home/sergey/Documents/Cpp_belt/Yellow/test_framework/CMakeFiles/edit_cache.dir
+/home/sergey/Documents/Cpp_belt/Yellow/test_framework/CMakeFiles/rebuild_cache.dir

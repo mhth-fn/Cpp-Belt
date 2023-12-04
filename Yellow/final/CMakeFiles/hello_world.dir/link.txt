@@ -1,0 +1,2 @@
+/usr/bin/ar qc libhello_world.a CMakeFiles/hello_world.dir/node.cpp.o CMakeFiles/hello_world.dir/condition_parser.cpp.o CMakeFiles/hello_world.dir/condition_parser_test.cpp.o CMakeFiles/hello_world.dir/database.cpp.o CMakeFiles/hello_world.dir/date.cpp.o CMakeFiles/hello_world.dir/token.cpp.o
+/usr/bin/ranlib libhello_world.a

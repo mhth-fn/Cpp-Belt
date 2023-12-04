@@ -1,0 +1,4 @@
+/home/sergey/Documents/Cpp_belt/Yellow/4_week/Personal_budget_starter/build/CMakeFiles/main.dir
+/home/sergey/Documents/Cpp_belt/Yellow/4_week/Personal_budget_starter/build/CMakeFiles/Library.dir
+/home/sergey/Documents/Cpp_belt/Yellow/4_week/Personal_budget_starter/build/CMakeFiles/edit_cache.dir
+/home/sergey/Documents/Cpp_belt/Yellow/4_week/Personal_budget_starter/build/CMakeFiles/rebuild_cache.dir
