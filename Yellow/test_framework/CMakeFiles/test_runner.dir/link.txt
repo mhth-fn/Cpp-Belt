@@ -1,2 +1,0 @@
-/usr/bin/ar qc libtest_runner.a CMakeFiles/test_runner.dir/test_runner.cpp.o
-/usr/bin/ranlib libtest_runner.a

@@ -1,2 +1,0 @@
-/usr/bin/llvm-ar qc libLibrary.a CMakeFiles/Library.dir/date.cpp.o CMakeFiles/Library.dir/budget.cpp.o CMakeFiles/Library.dir/tests.cpp.o CMakeFiles/Library.dir/home/sergey/Documents/Cpp_belt/Yellow/test_framework/test_runner.cpp.o
-/usr/bin/llvm-ranlib libLibrary.a
