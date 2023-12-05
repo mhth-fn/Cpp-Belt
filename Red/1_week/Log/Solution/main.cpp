@@ -1,4 +1,4 @@
-#include "../../test_runner/test_runner.h"
+#include "test_runner.h"
 #include <sstream>
 #include <string>
 using namespace std;
