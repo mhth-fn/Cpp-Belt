@@ -4,7 +4,7 @@
 
 Студента попросили написать класс Learner, помогающий изучать  иностранный язык. В публичном интерфейсе класса должны быть две функции:
 
-```
+```cpp
 int Learn(const vector<string>& words);
 vector<string> KnownWords();
 ```
@@ -21,7 +21,7 @@ vector<string> KnownWords();
 
 Ваш код будет тестироваться так:
 
-```
+```cpp
 int main() {
   Learner learner;
   string line;
