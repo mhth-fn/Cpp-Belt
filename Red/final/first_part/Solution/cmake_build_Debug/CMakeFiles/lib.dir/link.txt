@@ -1,2 +1,0 @@
-/usr/bin/ar qc liblib.a CMakeFiles/lib.dir/parse.cpp.o CMakeFiles/lib.dir/search_server.cpp.o
-/usr/bin/ranlib liblib.a

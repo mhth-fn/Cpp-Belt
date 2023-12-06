@@ -1,4 +1,0 @@
-/home/sergey/Documents/Cpp_belt/Red/final/first_part/Solution/cmake_build_Debug/CMakeFiles/lib.dir
-/home/sergey/Documents/Cpp_belt/Red/final/first_part/Solution/cmake_build_Debug/CMakeFiles/main.dir
-/home/sergey/Documents/Cpp_belt/Red/final/first_part/Solution/cmake_build_Debug/CMakeFiles/edit_cache.dir
-/home/sergey/Documents/Cpp_belt/Red/final/first_part/Solution/cmake_build_Debug/CMakeFiles/rebuild_cache.dir
