@@ -361,7 +361,6 @@ const unordered_map<string_view, Request::Type> STR_TO_REQUEST_TYPE = {
     {"Earn", Request::Type::EARN},
     {"PayTax", Request::Type::PAY_TAX},
     {"Spend", Request::Type::SPEND},
-
 };
 
 template <typename ResultType>
