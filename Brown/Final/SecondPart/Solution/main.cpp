@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <unordered_map>
 #include <utility>
@@ -106,9 +107,41 @@ public:
     }
     Struct response_;
 };
+
+class StopResponse : public Response{
+public:
+    StopResponse(string_view stop)
+    : stop_(stop), is_find(false) {}
+
+    StopResponse(string_view stop, set<string_view> buses)
+    : stop_(stop), buses_(buses), is_find(true) {}
+
+    string ToString(){
+        ostringstream out;
+        out << "Stop " << stop_ << ": ";
+        if (is_find){
+            if (buses_.size() != 0){
+               out << "buses";
+               for(const auto& bus : buses_){
+                    out << " " << bus;
+               }
+            } else {
+                out << "no buses";
+            }
+        } else {
+            out << "not found";
+        }
+        return out.str();
+    }
+
+    string_view stop_;
+    set<string_view> buses_;
+    bool is_find; 
+};
+
 using RouteBase = std::unordered_map<std::string, Route>;
 using StopBase = std::unordered_map<std::string, Coordinates>;
-
+using StopToBuses = std::unordered_map<std::string_view, set<string_view>>;
 class Init;
 using InitHolder = unique_ptr<Init>;
 
@@ -137,12 +170,34 @@ class RouteCatalog{
 public:
     friend class RouteCatalogBuilder;
     friend class BusRequest;
+
+    const RouteBase& GetRoutes() const{
+        return routebase_;
+    }
+
+    const StopBase& GetStops() const{
+        return stopbase_;
+    }
+
+    const StopToBuses& GetStopToBuses() const{
+        return stop_to_buses_;
+    }
 private:
     RouteCatalog(RouteBase routebase, StopBase stopbase) :
-    routebase_(move(routebase)), stopbase_(move(stopbase)) {}
+    routebase_(move(routebase)), stopbase_(move(stopbase)) {
+        for (const auto& stop : stopbase_){
+            stop_to_buses_[stop.first];
+        }
+        for (const auto& item : routebase_){
+            for (const auto& stop : item.second.stops_){
+                stop_to_buses_[stop].insert(item.first);
+            }
+        }
+    }
 
     RouteBase routebase_;
     StopBase stopbase_;
+    StopToBuses stop_to_buses_;
 };
 
 class RouteCatalogBuilder{
@@ -172,7 +227,8 @@ using RequestHolder = unique_ptr<Request>;
 class Request{
 public:
     enum class Type{
-        BUS
+        BUS,
+        STOP
     };
     
     virtual ResponseHolder Process(const RouteCatalog& rc) = 0;
@@ -182,7 +238,8 @@ public:
 };
 
 const unordered_map<string_view, Request::Type> Request::STR_TO_ENUM_TYPE{
-    {"Bus", Request::Type::BUS}
+    {"Bus", Request::Type::BUS},
+    {"Stop", Request::Type::STOP}
 };
 
 class BusRequest : public Request{
@@ -220,10 +277,28 @@ class BusRequest : public Request{
     string route;
 };
 
+class StopRequest : public Request{
+
+    ResponseHolder Process(const RouteCatalog& rc) override{
+        if (auto it = rc.GetStopToBuses().find(stop); it != end(rc.GetStopToBuses())){
+            return make_unique<StopResponse>(stop, it->second);
+        } else{
+            return make_unique<StopResponse>(stop);
+        }
+    }
+    void ParseFrom(std::string_view in) override{
+        stop = string(in);
+    }
+
+    string stop; 
+};
+
 RequestHolder Request::Create(Request::Type type) {
   switch (type) {
     case Request::Type::BUS:
-      return make_unique<BusRequest>();
+        return make_unique<BusRequest>();
+    case Request::Type::STOP:
+        return make_unique<StopRequest>();
     default:
       return nullptr;
   }
@@ -335,10 +410,31 @@ void PrintResponses(const vector<ResponseHolder>& responses, ostream& out_stream
   }
 }
 
+void Test();
 int main(){
-    //TestAll();
+    //Test();
     const auto route_catalog = RouteCatalogBuilder(ReadRequests<Init>()).Build();
     PrintResponses(ProcessRequests(route_catalog, ReadRequests<Request>()));
 
     return 0;
+}
+
+void Test(){
+    stringstream out, in;
+    in << 10
+    << "Stop Tolstopaltsevo: 55.611087, 37.20829\n"
+    << "Stop Marushkino: 55.595884, 37.209755\n"
+    << "Bus Test Name: Biryulyovo Zapadnoye > Biryusinka > Universam > Biryulyovo Tovarnaya > Biryulyovo Passazhirskaya > Biryulyovo Zapadnoye\n"
+    << "Bus 750: Tolstopaltsevo - Marushkino - Rasskazovka\n"
+    << "Stop Rasskazovka: 55.632761, 37.333324\n"
+    << "Stop Biryulyovo Zapadnoye: 55.574371, 37.6517\n"
+    << "Stop Biryusinka: 55.581065, 37.64839\n"
+    << "Stop Universam: 55.587655, 37.645687\n"
+    << "Stop Biryulyovo Tovarnaya: 55.592028, 37.653656\n"
+    << "Stop Biryulyovo Passazhirskaya: 55.580999, 37.659164\n";
+
+    const auto route_catalog = RouteCatalogBuilder(ReadRequests<Init>(in)).Build();
+    RouteBase expected_routes = {{"750", {{"Tolstopaltsevo", "Marushkino", "Rasskazovka"}, true}},
+    {"Test Route", {{"Biryulyovo Zapadnoye", "Biryusinka", "Universam", "Biryulyovo Tovarnaya", "Biryulyovo Passazhirskaya"}, false}}};
+    //ASSERT_EQUAL(route_catalog.GetRoutes(), expected_routes);A
 }
