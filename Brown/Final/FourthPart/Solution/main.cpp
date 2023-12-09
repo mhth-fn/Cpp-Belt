@@ -277,11 +277,6 @@ class BusRequest : public Request{
                     lhs = item;
                 }
             }
-            // if (it->second.is_circled){
-            //     res.real_length += res.real_length;
-            //     res.length += res.length;
-            //     res.stops = res.stops * 2 - 1;
-            // }
         }
         return make_unique<BusResponse>(res);
     }
@@ -439,31 +434,9 @@ void PrintResponses(const vector<ResponseHolder>& responses, ostream& out_stream
   }
 }
 
-void Test();
 int main(){
-    //Test();
     const auto route_catalog = RouteCatalogBuilder(ReadRequests<Init>()).Build();
     PrintResponses(ProcessRequests(route_catalog, ReadRequests<Request>()));
 
     return 0;
-}
-
-void Test(){
-    stringstream out, in;
-    in << 10
-    << "Stop Tolstopaltsevo: 55.611087, 37.20829\n"
-    << "Stop Marushkino: 55.595884, 37.209755\n"
-    << "Bus Test Name: Biryulyovo Zapadnoye > Biryusinka > Universam > Biryulyovo Tovarnaya > Biryulyovo Passazhirskaya > Biryulyovo Zapadnoye\n"
-    << "Bus 750: Tolstopaltsevo - Marushkino - Rasskazovka\n"
-    << "Stop Rasskazovka: 55.632761, 37.333324\n"
-    << "Stop Biryulyovo Zapadnoye: 55.574371, 37.6517\n"
-    << "Stop Biryusinka: 55.581065, 37.64839\n"
-    << "Stop Universam: 55.587655, 37.645687\n"
-    << "Stop Biryulyovo Tovarnaya: 55.592028, 37.653656\n"
-    << "Stop Biryulyovo Passazhirskaya: 55.580999, 37.659164\n";
-
-    const auto route_catalog = RouteCatalogBuilder(ReadRequests<Init>(in)).Build();
-    RouteBase expected_routes = {{"750", {{"Tolstopaltsevo", "Marushkino", "Rasskazovka"}, true}},
-    {"Test Route", {{"Biryulyovo Zapadnoye", "Biryusinka", "Universam", "Biryulyovo Tovarnaya", "Biryulyovo Passazhirskaya"}, false}}};
-    //ASSERT_EQUAL(route_catalog.GetRoutes(), expected_routes);A
 }
