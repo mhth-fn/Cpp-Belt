@@ -1,3 +1,5 @@
+#include "json.h"
+
 #include <algorithm>
 #include <iostream>
 #include <unordered_map>
@@ -11,6 +13,7 @@
 #include <vector>
 #include <set>
 #include <iomanip>
+#include <fstream>
 
 double PI = 3.1415926535;
 double R = 6371000.0;
@@ -435,6 +438,8 @@ void PrintResponses(const vector<ResponseHolder>& responses, ostream& out_stream
 }
 
 int main(){
+    ifstream json("test.json");
+    auto doc =  Json::Load(json); 
     const auto route_catalog = RouteCatalogBuilder(ReadRequests<Init>()).Build();
     PrintResponses(ProcessRequests(route_catalog, ReadRequests<Request>()));
 
