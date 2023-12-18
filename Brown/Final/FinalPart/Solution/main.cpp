@@ -1,6 +1,3 @@
-#include "router.h"
-#include "graph.h"
-
 #include <algorithm>
 #include <iostream>
 #include <unordered_map>
@@ -21,7 +18,217 @@
 #include <variant>
 #include <vector>
 #include <sstream>
+#include <cstdlib>
+#include <deque>
+#include <vector>
+#include <cassert>
+template <typename It>
+class Range {
+public:
+  using ValueType = typename std::iterator_traits<It>::value_type;
 
+  Range(It begin, It end) : begin_(begin), end_(end) {}
+  It begin() const { return begin_; }
+  It end() const { return end_; }
+
+private:
+  It begin_;
+  It end_;
+};
+
+namespace Graph {
+  //Айди вершины
+  using VertexId = size_t;
+  //Айди ребра
+  using EdgeId = size_t;
+
+  template <typename Weight>
+  struct Edge {
+    VertexId from;
+    VertexId to;
+    Weight weight;
+  };
+
+  template <typename Weight>
+  class DirectedWeightedGraph {
+  private:
+    using IncidenceList = std::vector<EdgeId>;
+    using IncidentEdgesRange = Range<typename IncidenceList::const_iterator>;
+
+  public:
+    DirectedWeightedGraph(size_t vertex_count);
+    EdgeId AddEdge(const Edge<Weight>& edge);
+
+    size_t GetVertexCount() const;
+    size_t GetEdgeCount() const;
+    const Edge<Weight>& GetEdge(EdgeId edge_id) const;
+    IncidentEdgesRange GetIncidentEdges(VertexId vertex) const;
+
+  private:
+    std::vector<Edge<Weight>> edges_;
+    std::vector<IncidenceList> incidence_lists_;
+  };
+
+
+  template <typename Weight>
+  DirectedWeightedGraph<Weight>::DirectedWeightedGraph(size_t vertex_count) : incidence_lists_(vertex_count) {}
+
+  template <typename Weight>
+  EdgeId DirectedWeightedGraph<Weight>::AddEdge(const Edge<Weight>& edge) {
+    edges_.push_back(edge);
+    const EdgeId id = edges_.size() - 1;
+    incidence_lists_[edge.from].push_back(id);
+    return id;
+  }
+
+  template <typename Weight>
+  size_t DirectedWeightedGraph<Weight>::GetVertexCount() const {
+    return incidence_lists_.size();
+  }
+
+  template <typename Weight>
+  size_t DirectedWeightedGraph<Weight>::GetEdgeCount() const {
+    return edges_.size();
+  }
+
+  template <typename Weight>
+  const Edge<Weight>& DirectedWeightedGraph<Weight>::GetEdge(EdgeId edge_id) const {
+    return edges_[edge_id];
+  }
+
+  template <typename Weight>
+  typename DirectedWeightedGraph<Weight>::IncidentEdgesRange
+  DirectedWeightedGraph<Weight>::GetIncidentEdges(VertexId vertex) const {
+    const auto& edges = incidence_lists_[vertex];
+    return {std::begin(edges), std::end(edges)};
+  }
+}
+namespace Graph {
+
+  template <typename Weight>
+  class Router {
+  private:
+    using Graph = DirectedWeightedGraph<Weight>;
+
+  public:
+    Router(const Graph& graph);
+
+    using RouteId = uint64_t;
+
+    struct RouteInfo {
+      RouteId id;
+      Weight weight;
+      size_t edge_count;
+    };
+
+    std::optional<RouteInfo> BuildRoute(VertexId from, VertexId to) const;
+    EdgeId GetRouteEdge(RouteId route_id, size_t edge_idx) const;
+    void ReleaseRoute(RouteId route_id);
+
+  private:
+    const Graph& graph_;
+
+    struct RouteInternalData {
+      Weight weight;
+      std::optional<EdgeId> prev_edge;
+    };
+    using RoutesInternalData = std::vector<std::vector<std::optional<RouteInternalData>>>;
+
+    using ExpandedRoute = std::vector<EdgeId>;
+    mutable RouteId next_route_id_ = 0;
+    mutable std::unordered_map<RouteId, ExpandedRoute> expanded_routes_cache_;
+
+    void InitializeRoutesInternalData(const Graph& graph) {
+      const size_t vertex_count = graph.GetVertexCount();
+      for (VertexId vertex = 0; vertex < vertex_count; ++vertex) {
+        routes_internal_data_[vertex][vertex] = RouteInternalData{0, std::nullopt};
+        for (const EdgeId edge_id : graph.GetIncidentEdges(vertex)) {
+          const auto& edge = graph.GetEdge(edge_id);
+          assert(edge.weight >= 0);
+          auto& route_internal_data = routes_internal_data_[vertex][edge.to];
+          if (!route_internal_data || route_internal_data->weight > edge.weight) {
+            route_internal_data = RouteInternalData{edge.weight, edge_id};
+          }
+        }
+      }
+    }
+
+    void RelaxRoute(VertexId vertex_from, VertexId vertex_to,
+                    const RouteInternalData& route_from, const RouteInternalData& route_to) {
+      auto& route_relaxing = routes_internal_data_[vertex_from][vertex_to];
+      const Weight candidate_weight = route_from.weight + route_to.weight;
+      if (!route_relaxing || candidate_weight < route_relaxing->weight) {
+        route_relaxing = {
+            candidate_weight,
+            route_to.prev_edge
+                ? route_to.prev_edge
+                : route_from.prev_edge
+        };
+      }
+    }
+
+    void RelaxRoutesInternalDataThroughVertex(size_t vertex_count, VertexId vertex_through) {
+      for (VertexId vertex_from = 0; vertex_from < vertex_count; ++vertex_from) {
+        if (const auto& route_from = routes_internal_data_[vertex_from][vertex_through]) {
+          for (VertexId vertex_to = 0; vertex_to < vertex_count; ++vertex_to) {
+            if (const auto& route_to = routes_internal_data_[vertex_through][vertex_to]) {
+              RelaxRoute(vertex_from, vertex_to, *route_from, *route_to);
+            }
+          }
+        }
+      }
+    }
+
+    RoutesInternalData routes_internal_data_;
+  };
+
+
+  template <typename Weight>
+  Router<Weight>::Router(const Graph& graph)
+      : graph_(graph),
+        routes_internal_data_(graph.GetVertexCount(), std::vector<std::optional<RouteInternalData>>(graph.GetVertexCount()))
+  {
+    InitializeRoutesInternalData(graph);
+
+    const size_t vertex_count = graph.GetVertexCount();
+    for (VertexId vertex_through = 0; vertex_through < vertex_count; ++vertex_through) {
+      RelaxRoutesInternalDataThroughVertex(vertex_count, vertex_through);
+    }
+  }
+
+  template <typename Weight>
+  std::optional<typename Router<Weight>::RouteInfo> Router<Weight>::BuildRoute(VertexId from, VertexId to) const {
+    const auto& route_internal_data = routes_internal_data_[from][to];
+    if (!route_internal_data) {
+      return std::nullopt;
+    }
+    const Weight weight = route_internal_data->weight;
+    std::vector<EdgeId> edges;
+    for (std::optional<EdgeId> edge_id = route_internal_data->prev_edge;
+         edge_id;
+         edge_id = routes_internal_data_[from][graph_.GetEdge(*edge_id).from]->prev_edge) {
+      edges.push_back(*edge_id);
+    }
+    std::reverse(std::begin(edges), std::end(edges));
+
+    const RouteId route_id = next_route_id_++;
+    const size_t route_edge_count = edges.size();
+    expanded_routes_cache_[route_id] = std::move(edges);
+    return RouteInfo{route_id, weight, route_edge_count};
+  }
+
+  template <typename Weight>
+  EdgeId Router<Weight>::GetRouteEdge(RouteId route_id, size_t edge_idx) const {
+    return expanded_routes_cache_.at(route_id)[edge_idx];
+  }
+
+  template <typename Weight>
+  void Router<Weight>::ReleaseRoute(RouteId route_id) {
+    expanded_routes_cache_.erase(route_id);
+  }
+
+}
+   
 namespace Json {
 
   class Node : std::variant<std::vector<Node>,
@@ -252,6 +459,13 @@ double Spacing(const Coordinates& lhs, const Coordinates& rhs){
   return acos(sin(lhs.latitude) * sin(rhs.latitude) +
   cos(lhs.latitude) * cos(rhs.latitude) * cos(lon_diff)) * R;
 }
+
+struct RouteResponseStruct{
+      double time;
+      string type;
+      string name;
+      int span_count;
+    };
 class Response;
 using ResponseHolder = unique_ptr<Response>;
 
@@ -369,6 +583,59 @@ public:
     bool is_find; 
 };
 
+class RouteResponse : public Response{
+public:
+    RouteResponse(vector<RouteResponseStruct> res, int id) :
+    res_(res), id_(id){
+    }
+
+    string ToString(){
+      return "";
+    }
+
+    stringstream ToJson(){
+      stringstream out;
+      double total_time = 0;
+      out << "\t{\n";
+      if (res_.size() == 0){
+        out << "\t\t\"error_message\": \"not found\",\n";
+        out << "\t\t\"request_id\": " << id_ << '\n';
+        out << "\t}";
+        return out;
+      }
+      out << "\t\t\"items\": [";
+      for (size_t i = 0; i != res_.size(); ++i){
+        auto& item = res_[i];
+        out << std::setprecision(6) << "\n\t\t\t{\n";
+        if (item.type == "wait"){
+          out << "\t\t\t\t\"time\": " << item.time << ",\n";
+          out << "\t\t\t\t\"type\": \"Wait\",\n";
+          out << "\t\t\t\t\"stop_name\": " << "\"" << item.name << "\"\n";
+          total_time += item.time;
+        } else {
+          out << "\t\t\t\t\"span_count\": " << item.span_count << ",\n";
+          out << "\t\t\t\t\"bus\": " << "\"" << item.name << "\",\n";
+          out << "\t\t\t\t\"type\": \"Bus\",\n";
+          out << "\t\t\t\t\"time\": " << item.time  << "\n";
+          total_time += item.time;
+        }
+        out << "\t\t\t}";
+        if (i != res_.size() - 1){
+          out << ",";
+        }
+        out << "\n";
+      }
+      out << "\t\t],\n";
+      out << "\t\t\"request_id\": " << id_ << ",\n";
+      out << "\t\t\"total_time\": " << total_time << '\n';
+      out << "\t}";
+      return out;
+    }
+    int id_;
+    vector<RouteResponseStruct> res_;
+
+};
+
 using RouteBase = std::unordered_map<std::string, Route>;
 using StopBase = std::unordered_map<std::string, Coordinates>;
 using StopToBuses = std::unordered_map<std::string_view, set<string_view>>;
@@ -400,13 +667,17 @@ class RouteCatalog{
 public:
     friend class RouteCatalogBuilder;
     friend class BusRequest;
-
+    friend class RouteRequest;
     const RouteBase& GetRoutes() const{
         return routebase_;
     }
 
     const StopBase& GetStops() const{
         return stopbase_;
+    }
+
+    const Graph::DirectedWeightedGraph<double>& GetGraph() const{
+        return graph;
     }
 
     const StopToBuses& GetStopToBuses() const{
@@ -416,11 +687,52 @@ public:
     const auto& GetStopsDistance() const{
         return stops_distance_;
     }
+
+    int GetIdEdge(const string& str) const{
+      return id_for_stops.at(str);
+    }
+
+    const RouteCatalog& SetWait(const size_t wait) const{
+      wait_ = wait;
+      return *this;
+    }
+
+    const RouteCatalog& SetSpeed(const size_t speed) const{
+      speed_ = speed;
+      return *this;
+    }
+
+    void CreateGraph(){
+      for (const auto& item : routebase_){
+        auto& stops = item.second.stops_;
+        for (size_t i = 0; i != stops.size(); ++i){
+          for (size_t j = i + 1; j != stops.size(); ++j){
+            Graph::Edge<double> edge;
+            edge.from = id_for_stops[stops[i]];
+            edge.to = id_for_stops[stops[j]];
+            edge.weight = 0;
+            for (size_t k = i; k < j; ++k){
+              edge.weight += stops_distance_[stops[k]][stops[k+1]];
+            }
+            if (i != j){
+              edge.weight = (edge.weight / (speed_ * 1000.0 / 60.0)) + wait_;
+            }
+            edge_for_route[graph.AddEdge(edge)] = {item.first, j};
+          }
+        }
+      }
+    }
 private:
     RouteCatalog(RouteBase routebase, StopBase stopbase,  unordered_map<string, unordered_map<string, double>> stops_distance) :
-    routebase_(move(routebase)), stopbase_(move(stopbase)), stops_distance_(move(stops_distance)){
+    graph(stopbase.size()), routebase_(move(routebase)), stopbase_(move(stopbase)), stops_distance_(move(stops_distance)){
+        size_t i = 0;
         for (const auto& stop : stopbase_){
             stop_to_buses_[stop.first];
+            id_for_stops[stop.first] = i;
+            ++i;
+        }
+        for (const auto& item : id_for_stops){
+          stops_for_id[item.second] = item.first;
         }
         for (auto& item : routebase_){
             for (const auto& stop : item.second.stops_){
@@ -434,11 +746,17 @@ private:
             }
         }
     }
-
+    Graph::DirectedWeightedGraph<double> graph;
+    mutable double wait_ = 0,
+            speed_ = 0;
     RouteBase routebase_;
     StopBase stopbase_;
     StopToBuses stop_to_buses_;
     unordered_map<string, unordered_map<string, double>> stops_distance_;
+    unordered_map<string, int> id_for_stops;
+    unordered_map<int, string> stops_for_id;
+    unordered_map<size_t, pair<string, int>> edge_for_route;
+  
 };
 
 class RouteCatalogBuilder{
@@ -469,8 +787,9 @@ using RequestHolder = unique_ptr<Request>;
 class Request{
 public:
     enum class Type{
-        BUS,
-        STOP
+        BUS, 
+        STOP,
+        ROUTE
     };
     
     virtual ResponseHolder Process(const RouteCatalog& rc) = 0;
@@ -481,7 +800,8 @@ public:
 
 const unordered_map<string_view, Request::Type> Request::STR_TO_ENUM_TYPE{
     {"Bus", Request::Type::BUS},
-    {"Stop", Request::Type::STOP}
+    {"Stop", Request::Type::STOP},
+    {"Route", Request::Type::ROUTE}
 };
 
 class BusRequest : public Request{
@@ -540,12 +860,46 @@ class StopRequest : public Request{
     string stop; 
 };
 
+class RouteRequest : public Request{
+
+    ResponseHolder Process(const RouteCatalog& rc) override{
+      Graph::Router route(rc.graph);
+      vector<RouteResponseStruct> res;
+      auto evulation = route.BuildRoute(rc.GetIdEdge(from_), rc.GetIdEdge(to_));
+      for (size_t i = 0; evulation.has_value() && i != evulation.value().edge_count; ++i){
+        auto edge_id = route.GetRouteEdge(0, i);
+        auto edge = rc.graph.GetEdge(edge_id);
+        string stop_from = rc.stops_for_id.at(edge.from);
+        res.push_back({rc.wait_, "wait", stop_from, 0});
+        RouteResponseStruct rrs;
+        rrs.span_count = rc.edge_for_route.at(edge_id).second;
+        rrs.type = "bus";
+        rrs.name = rc.edge_for_route.at(edge_id).first;
+        rrs.time = rc.graph.GetEdge(edge_id).weight - rc.wait_;
+        res.push_back(rrs);
+      }
+
+      return make_unique<RouteResponse>(res, id_);
+    }
+    void ParseFrom(const map<string, Json::Node>& json_request) override{
+      from_ = json_request.at("from").AsString();
+      to_ = json_request.at("to").AsString();
+      id_ = json_request.at("id").AsDouble();
+    }
+
+    int id_;
+    string from_;
+    string to_;
+};
+
 RequestHolder Request::Create(Request::Type type) {
   switch (type) {
     case Request::Type::BUS:
         return make_unique<BusRequest>();
     case Request::Type::STOP:
         return make_unique<StopRequest>();
+    case Request::Type::ROUTE:
+        return make_unique<RouteRequest>();
     default:
       return nullptr;
   }
@@ -708,14 +1062,16 @@ void PrintResponsesJson(const vector<ResponseHolder>& responses, ostream& out_st
 stringstream FromJsonToSS(Json::Document);
 
 int main(){
-    string str;
-    getline(cin, str);
-    stringstream ss(str);
-    auto json = Json::Load(ss); 
-    auto& base_request = json.GetRoot().AsMap().at("base_requests").AsArray();
-    const auto route_catalog = RouteCatalogBuilder(ReadRequests<Init>(base_request)).Build();
-    auto& stat_request = json.GetRoot().AsMap().at("stat_requests").AsArray();
-    PrintResponsesJson(ProcessRequests(route_catalog, ReadRequests<Request>(stat_request)));
-    return 0;
+  ifstream in("test.json");
+  auto json = Json::Load(in);
+  auto& base_request = json.GetRoot().AsMap().at("base_requests").AsArray();
+  auto route_catalog = RouteCatalogBuilder(ReadRequests<Init>(base_request)).Build();
+  route_catalog.SetWait(json.GetRoot().AsMap().at("routing_settings").AsMap().at("bus_wait_time").AsDouble())
+               .SetSpeed(json.GetRoot().AsMap().at("routing_settings").AsMap().at("bus_velocity").AsDouble());
+  auto& stat_request = json.GetRoot().AsMap().at("stat_requests").AsArray();
+  route_catalog.CreateGraph();
+  ofstream out("out2.json");
+  PrintResponsesJson(ProcessRequests(route_catalog, ReadRequests<Request>(stat_request)), out);
+  return 0;
 }
 

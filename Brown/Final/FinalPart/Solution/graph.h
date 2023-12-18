@@ -19,8 +19,9 @@ private:
 };
 
 namespace Graph {
-
+  //Айди вершины
   using VertexId = size_t;
+  //Айди ребра
   using EdgeId = size_t;
 
   template <typename Weight>
