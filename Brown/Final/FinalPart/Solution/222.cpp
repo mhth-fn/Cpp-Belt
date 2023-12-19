@@ -607,8 +607,7 @@ public:
       if (!res_.empty() && res_[0].type == "void"){
         res_.clear();
       }
-      size_t size = res_.size();
-      for (size_t i = 0; i != size; ++i){
+      for (size_t i = 0; i != res_.size(); ++i){
         auto& item = res_[i];
         out << std::setprecision(6) << "\n\t\t\t{\n";
         if (item.type == "wait"){
@@ -624,7 +623,7 @@ public:
           total_time += item.time;
         }
         out << "\t\t\t}";
-        if (i != size - 1){
+        if (i != res_.size() - 1){
           out << ",";
         }
         out << "\n";
@@ -697,29 +696,17 @@ public:
       return id_for_stops.at(str);
     }
 
+    const RouteCatalog& SetWait(const size_t wait) const{
+      wait_ = wait;
+      return *this;
+    }
 
+    const RouteCatalog& SetSpeed(const size_t speed) const{
+      speed_ = speed;
+      return *this;
+    }
 
-private:
-    RouteCatalog(double wait, double speed, RouteBase& routebase, StopBase& stopbase,  unordered_map<string, unordered_map<string, double>>& stops_distance,
-    StopToBuses& stop_to_buses,
-    unordered_map<string, int>& id_for_stops_, unordered_map<int, string>& stops_for_id_, unordered_map<size_t, pair<string, int>>& edge_for_route_) :
-    wait_(wait), speed_(speed), routebase_(move(routebase)), stopbase_(move(stopbase)), stops_distance_(move(stops_distance)),
-    stop_to_buses_(move(stop_to_buses)), id_for_stops(move(id_for_stops_)), stops_for_id(move(stops_for_id_)), edge_for_route(move(edge_for_route_)),
-    graph(CreateGraph()), route(graph) {}
-
-    double wait_ = 0,
-           speed_ = 0;
-    RouteBase routebase_;
-    StopBase stopbase_;
-    StopToBuses stop_to_buses_;
-    unordered_map<string, unordered_map<string, double>> stops_distance_;
-    unordered_map<string, int> id_for_stops;
-    unordered_map<int, string> stops_for_id;
-    unordered_map<size_t, pair<string, int>> edge_for_route;
-    Graph::DirectedWeightedGraph<double> graph;
-
-    Graph::DirectedWeightedGraph<double> CreateGraph(){
-      Graph::DirectedWeightedGraph<double> graph_(stopbase_.size());
+    void CreateGraph(){
       for (const auto& item : routebase_){
         auto& stops = item.second.stops_;
         for (size_t i = 0; i != stops.size(); ++i){
@@ -732,14 +719,44 @@ private:
               edge.weight += stops_distance_[stops[k]][stops[k+1]];
             }
             edge.weight = (edge.weight / (speed_ * 1000.0 / 60.0)) + wait_;
-            edge_for_route[graph_.AddEdge(edge)] = {item.first, j - i};
+            edge_for_route[graph.AddEdge(edge)] = {item.first, j - i};
           }
         }
       }
-      return graph_;
-    }  
-
-    Graph::Router<double> route;
+    }
+private:
+    RouteCatalog(RouteBase& routebase, StopBase& stopbase,  unordered_map<string, unordered_map<string, double>>& stops_distance) :
+    graph(stopbase.size()), routebase_(move(routebase)), stopbase_(move(stopbase)), stops_distance_(move(stops_distance)){
+        size_t i = 0;
+        for (const auto& stop : stopbase_){
+            stop_to_buses_[stop.first];
+            id_for_stops[stop.first] = i;
+            stops_for_id[i] = stop.first;
+            ++i;
+        }
+        for (auto& item : routebase_){
+            for (const auto& stop : item.second.stops_){
+                stop_to_buses_[stop].insert(item.first);
+            }
+            if (item.second.is_circled){
+                std::vector<string> tmp(item.second.stops_.rbegin() + 1, item.second.stops_.rend());
+                for (auto& el : tmp){
+                    item.second.stops_.push_back(el);
+                }
+            }
+        }
+    }
+    Graph::DirectedWeightedGraph<double> graph;
+    mutable double wait_ = 0,
+            speed_ = 0;
+    RouteBase routebase_;
+    StopBase stopbase_;
+    StopToBuses stop_to_buses_;
+    unordered_map<string, unordered_map<string, double>> stops_distance_;
+    unordered_map<string, int> id_for_stops;
+    unordered_map<int, string> stops_for_id;
+    unordered_map<size_t, pair<string, int>> edge_for_route;
+  
 };
 
 class RouteCatalogBuilder{
@@ -754,38 +771,13 @@ public:
             init_pull[i]->Process(*this);
         }
     }
-
-    RouteCatalog Build(double wait, double speed){
-      size_t i = 0;
-        for (const auto& stop : stopbase_temp){
-            stop_to_buses[stop.first];
-            id_for_stops[stop.first] = i;
-            stops_for_id[i] = stop.first;
-            ++i;
-        }
-        for (auto& item : routebase_temp){
-            for (const auto& stop : item.second.stops_){
-                stop_to_buses[stop].insert(item.first);
-            }
-            if (item.second.is_circled){
-                std::vector<string> tmp(item.second.stops_.rbegin() + 1, item.second.stops_.rend());
-                for (auto& el : tmp){
-                    item.second.stops_.push_back(el);
-                }
-            }
-        }
-    
-        return RouteCatalog{wait, speed, routebase_temp, stopbase_temp, stops_distance,
-        stop_to_buses, id_for_stops, stops_for_id, edge_for_route};
+    RouteCatalog Build(){
+        return RouteCatalog{routebase_temp, stopbase_temp, stops_distance};
     }
 private:
     RouteBase routebase_temp;
     StopBase stopbase_temp;
     unordered_map<string, unordered_map<string, double>> stops_distance;
-    StopToBuses stop_to_buses;
-    unordered_map<string, int> id_for_stops;
-    unordered_map<int, string> stops_for_id;
-    unordered_map<size_t, pair<string, int>> edge_for_route;
 };
 
 
@@ -871,15 +863,16 @@ class StopRequest : public Request{
 class RouteRequest : public Request{
 
     ResponseHolder Process(const RouteCatalog& rc) override{
+      Graph::Router route(rc.graph);
       vector<RouteResponseStruct> res;
-      auto evulation = rc.route.BuildRoute(rc.GetIdEdge(from_), rc.GetIdEdge(to_));
+      auto evulation = route.BuildRoute(rc.GetIdEdge(from_), rc.GetIdEdge(to_));
       
       bool has_value = evulation.has_value();
       if (has_value){
         size_t size = evulation.value().edge_count;
         res.reserve(size);
-        for (size_t i = 0; i != size; ++i){
-          auto edge_id = rc.route.GetRouteEdge(evulation.value().id, i);
+        for (size_t i = 0; has_value && i != size; ++i){
+          auto edge_id = route.GetRouteEdge(0, i);
           auto edge = rc.graph.GetEdge(edge_id);
           string stop_from = rc.stops_for_id.at(edge.from);
           res.push_back({rc.wait_, "wait", stop_from, 0});
@@ -1085,11 +1078,11 @@ int main(){
   cin.tie(nullptr);
   auto json = Json::Load(cin);
   auto& base_request = json.GetRoot().AsMap().at("base_requests").AsArray();
-  double wait = json.GetRoot().AsMap().at("routing_settings").AsMap().at("bus_wait_time").AsDouble();
-  double speed = json.GetRoot().AsMap().at("routing_settings").AsMap().at("bus_velocity").AsDouble();
-  auto route_catalog = RouteCatalogBuilder(ReadRequests<Init>(base_request)).Build(wait, speed);
-
+  auto route_catalog = RouteCatalogBuilder(ReadRequests<Init>(base_request)).Build();
+  route_catalog.SetWait(json.GetRoot().AsMap().at("routing_settings").AsMap().at("bus_wait_time").AsDouble())
+               .SetSpeed(json.GetRoot().AsMap().at("routing_settings").AsMap().at("bus_velocity").AsDouble());
   auto& stat_request = json.GetRoot().AsMap().at("stat_requests").AsArray();
+  route_catalog.CreateGraph();
  // ofstream out("out2.json");
   PrintResponsesJson(ProcessRequests(route_catalog, ReadRequests<Request>(stat_request)));
   return 0;
